@@ -18,9 +18,107 @@ enum GameState
     NAME_INPUT,
     MENU,
     PLAY,
-    GAME_OVER
+    GAME_OVER,
+    LEADERBOARD
 };
 
+//Basic binary tree structure for maintaing and calculating position in leaderboard
+struct TreeNode
+{
+    TreeNode* left;
+    TreeNode* right;
+    int score;
+    string player_name;
+    TreeNode(int s,string name):left(nullptr),right(nullptr),score(s),player_name(name){}
+};
+
+//functions of bst 
+class BST
+{
+    TreeNode* parent;
+
+    TreeNode* insert_node(TreeNode* node,int score,string name)
+    {
+        if(!node) return new TreeNode(score,name);
+        if(score<node->score) node->left=insert_node(node->left,score,name);
+        else if(score>node->score) node->right=insert_node(node->right,score,name);
+        return node;
+    }
+    void inorder_traversal(TreeNode* root,vector<pair<int,string>>&scores)
+    {
+        if(root)
+        {
+            inorder_traversal(root->right,scores);
+            scores.push_back({root->score,root->player_name});
+            inorder_traversal(root->left,scores);
+        }
+    }
+    void clear(TreeNode* root)
+    {
+        if(root)
+        {
+            clear(root->left);
+            clear(root->right);
+            delete root;
+        }
+    }
+    public:
+    BST():parent(nullptr){}
+    void insert(int score,string name)
+    {
+        parent=this->insert_node(parent,score,name);
+    }
+    vector<pair<int,string>> get_scores()
+    {
+        vector<pair<int,string>>SCORES;
+        this->inorder_traversal(parent,SCORES);
+        return SCORES;
+    }
+    ~BST()
+    {
+        this->clear(this->parent);
+    }
+};
+
+
+//class for handling saving and loading files
+class SaveFile
+{
+    fstream savefile;
+    public:
+    void save_file(vector<pair<int,string>>&scores)
+    {
+        savefile.open("LEADERBOARD.txt",ios::out);
+        if(savefile.is_open())
+        {
+            for(const auto& score:scores)
+            {
+                savefile<<score.second<<" "<<score.first<<endl;
+                cout<<score.second<<" "<<score.first<<endl;
+            }
+            savefile.close();
+        }
+    }
+    void loadFile(BST& leaderboard)
+    {
+        savefile.open("LEADERBOARD.txt",ios::in);
+        if (savefile.is_open())
+        {
+            string name;
+            int score;
+            while(savefile>>name>>score)
+            {
+                leaderboard.insert(score,name);
+            }
+            savefile.close();
+        }
+        
+    }
+
+};
+
+
+//the first menu to take input from user and play button
 class name_input
 {
     Sprite background;
@@ -145,6 +243,9 @@ class name_input
         window.draw(this->arrow);
     }
 };
+
+
+//welcome page and start button
 class Menu
 {
   Sprite background;
@@ -278,7 +379,7 @@ public:
         this->init_texture();
         this->sprite.setTexture(this->texture);
         this->sprite.setPosition(pos_x,pos_y);
-        this->speed=3.f;
+        this->speed=2.f;
         this->points=10;
     }
 
@@ -395,26 +496,92 @@ class Game
     Event ev;
     Player *player;
     vector<Enemy*>enemies;
+    Menu *menu;
+    vector<Bullet*>bullets;
     float spawn_timer;
     float spawn_timer_max;
+    Sprite background;
+    Texture background_texture;
     Font font;
-    Text point_text;
 
     //--------------------------------------------------------------
-    Menu *menu;
     GameState state;
     name_input *input;
-    Text GameOverText;
     RectangleShape hp_bar;
     RectangleShape hp_bar_back;
     string player_name;
     int points;
+    Text point_text;
 
-    Sprite background;
     Sprite gameover_background;
+    Text GameOverText;
     Texture gameover_texture;
-    Texture background_texture;
-    vector<Bullet*>bullets;
+
+    BST leaderboard;
+    RectangleShape button;
+    Text leaderboard_button_text;
+    SaveFile file;
+//--------------leaderboard button on game over page------------
+    void init_button()
+    {
+        this->leaderboard_button_text.setFont(this->font);
+        this->leaderboard_button_text.setFillColor(Color::White);
+        this->leaderboard_button_text.setCharacterSize(40);
+        this->leaderboard_button_text.setPosition(300.f,400.f);
+        this->leaderboard_button_text.setString("LEADERBOARD");
+        FloatRect getbounds=leaderboard_button_text.getGlobalBounds();
+
+        this->button.setSize(Vector2f(getbounds.width+20.f,getbounds.height+10.f));
+        this->button.setFillColor(Color(25,25,25,200));
+        this->button.setOutlineColor(Color::White);
+        this->button.setOutlineThickness(1.f);
+        this->button.setPosition(this->leaderboard_button_text.getPosition().x - 10.f,
+         this->leaderboard_button_text.getPosition().y + 8.f
+        );
+
+    }
+    bool is_Mouse_hover()
+    {
+      Vector2i mouse_pos=Mouse::getPosition(*this->window);
+      FloatRect getbounds=button.getGlobalBounds();
+      return getbounds.contains(static_cast<Vector2f>(mouse_pos));
+    }
+
+    void update_color()
+  {
+    if(is_Mouse_hover())
+    {
+        button.setFillColor(Color(50,50,50,200));
+    }
+    else
+    {
+        button.setFillColor(Color(25,25,25,200));
+    }
+  }
+//--------------------------------------------------------------------  
+
+    void render_leaderboard()
+    {
+        this->window->draw(this->gameover_background);
+        Text title("Leaderboard", this->font, 50);
+        title.setFillColor(Color::White);
+        title.setPosition(200.f,200.f);
+        this->window->draw(title);
+        vector<pair<int, string>> scores = this->leaderboard.get_scores();
+        float y_position = 350.f;
+
+        for (const auto& score : scores)
+        {
+            Text scoreText;
+            scoreText.setFont(this->font);
+            scoreText.setCharacterSize(30);
+            scoreText.setFillColor(Color::White);
+            scoreText.setString(score.second + " : " + to_string(score.first));
+            scoreText.setPosition(100.f, y_position);
+            this->window->draw(scoreText);
+            y_position += 40.f;
+        }
+    }
 
     void init_background()
     {
@@ -434,9 +601,9 @@ class Game
     {
         this->font.loadFromFile("C:/Users/sairam/Documents/data structures/graph/Texture/ARCADE.ttf");
         this->point_text.setFont(this->font);
-        this->point_text.setCharacterSize(25);
+        this->point_text.setCharacterSize(28);
         this->point_text.setFillColor(Color::White);
-        this->point_text.setPosition(650.f,25.f);
+        this->point_text.setPosition(630.f,25.f);
         this->points=0;
         this->hp_bar.setSize(Vector2f(200.f,25.f));
         this->hp_bar.setFillColor(Color(250,0,0));
@@ -450,6 +617,7 @@ class Game
         this->window->getSize().y/2.f-this->GameOverText.getGlobalBounds().height/2);
         this->GameOverText.setString("GAME OVER");
     }
+    
     public:
     Game()
     {   
@@ -464,6 +632,8 @@ class Game
         this->spawn_timer_max=50.f;
         this->spawn_timer=this->spawn_timer_max;
         this->init_gui();
+        this->init_button();
+        this->file.loadFile(this->leaderboard);
     }
     
     
@@ -539,7 +709,10 @@ class Game
             else if (this->ev.type == Event::KeyPressed)
             {
                 if(this->ev.key.code == Keyboard::Escape)
-                this->window->close();
+                {
+                    this->window->close();
+                    break;
+                }
                 else if(ev.key.code==Keyboard::Left)
                {
                 this->player->move(-1.f,0.f);
@@ -563,6 +736,25 @@ class Game
                }
             }
             break;
+        case GAME_OVER:
+             if (this->ev.type == Event::MouseButtonPressed && this->ev.mouseButton.button == Mouse::Left)
+            {
+                if (this->is_Mouse_hover())
+                {
+                    this->state = LEADERBOARD;
+                }
+            }
+             else if(this->ev.type==Event::KeyPressed)
+             {
+                if(ev.key.code==Keyboard::Escape) this->window->close();
+             }
+             break;
+        case LEADERBOARD:
+             if(this->ev.type==Event::KeyPressed)
+             {
+                if(ev.key.code==Keyboard::Escape) this->window->close();
+             } 
+             break;
         default:
             break;
         }
@@ -572,16 +764,14 @@ class Game
     void update_bullets()
     {
         int count=0;
-        for(auto *bullet :bullets)
+        for(int i=0;i<bullets.size();i++)
         {
-            bullet->update();
-            if(bullet->getbounds().top+bullet->getbounds().height<0.f)
+            bullets[i]->update();
+            if(bullets[i]->getbounds().top+bullets[i]->getbounds().height<0.f)
             {
-                delete this->bullets.at(count);
-                this->bullets.erase(this->bullets.begin()+count);
-                count--;
+                delete this->bullets[i];
+                this->bullets.erase(this->bullets.begin()+i);
             }
-            count++;
         }
     }
 
@@ -634,7 +824,14 @@ class Game
            this->update_bullets();
            this->update_enemies();
            this->update_gui();
-           if(this->player->get_hp()<=0) this->state=GAME_OVER;
+           if(this->player->get_hp()<=0) 
+           {
+             this->state=GAME_OVER;
+             leaderboard.insert(this->points,this->player_name);
+             cout<<player_name<<endl;
+             vector<pair<int,string>>scores=leaderboard.get_scores();
+             file.save_file(scores);
+           }
         }
             
     }
@@ -656,6 +853,9 @@ class Game
     {
         this->window->draw(this->gameover_background);
         this->window->draw(this->GameOverText);
+        this->window->draw(this->button);
+        update_color();
+        this->window->draw(this->leaderboard_button_text);
     }
 
     void render()
@@ -686,6 +886,10 @@ class Game
         else if(this->state==GAME_OVER)
         {
             this->render_game_over_screen();
+        }
+        else if(this->state==LEADERBOARD)
+        {
+            this->render_leaderboard();
         }
         this->window->display();
     }
